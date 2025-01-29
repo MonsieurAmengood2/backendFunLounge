@@ -43,6 +43,19 @@ const loginsDB = mongoose.createConnection(process.env.MONGO_LOGINS, {
 });
 loginsDB.on("connected", () => console.log("✅ Conectado ao MongoDB (Logins)!"));
 
+// Criar os modelos separados para cada base de dados
+const UserModel = usersDB.model("User", new mongoose.Schema({
+    username: String,
+    email: String,
+    password: String
+}));
+
+const LoginModel = loginsDB.model("Login", new mongoose.Schema({
+    username: String,
+    loginTime: { type: Date, default: Date.now }
+}));
+
+
 //Ativa o CORS para permitir que outros domínios ou aplicações acedam à API.
 app.use(cors());
 
@@ -64,7 +77,7 @@ app.post("/register", async (req, res) => {
     try {
 
         //Se um utilizador com joao123 ou joao@example.com já existir na base, existingUser ficará com esses dados
-        const existingUser = await User.findOne({ $or: [{ username }, { email }] });
+        const existingUser = await UserModel.findOne({ $or: [{ username }, { email }] });
         
         //Se o utilizar já existir, retorna o erro 409 - Conflict
         if (existingUser) {
@@ -72,7 +85,7 @@ app.post("/register", async (req, res) => {
         }
         
         //Cria um novo objeto User com os dados fornecidos.
-        const newUser = new User({ username, email, password });
+        const newUser = new UserModel({ username, email, password });
 
         //save() serve para armazenar esse utilizador na coleção users do MongoDB
         await newUser.save();
@@ -116,7 +129,7 @@ app.post("/login", async (req, res) => {
         //Com async, o Node.js continua a rodar outras tarefas enquanto espera a resposta do MongoDB.
         //A função findOne() é um método do Mongoose,usada para interagir com o MongoDB
         // Aqui acede-se à coleção users no base de dados MongoDB procurando-se um único utilizador onde username seja igual ao valor passado.
-        const user = await User.findOne({ username });
+        const user = await UserModel.findOne({ username });
 
         //Se o usuário não existir, user será null
         if (!user) {
@@ -138,7 +151,7 @@ app.post("/login", async (req, res) => {
         //Se a senha estiver correta, exibe-se uma mensagem no terminal do servidor
         console.log(`O Utilizador ${username} fez login com sucesso!`);
 
-        const loginEntry = new Login({ username });
+        const loginEntry = new LoginModel({ username });
         await loginEntry.save();
 
         //Retorna um "token fake" 
@@ -154,7 +167,7 @@ app.post("/login", async (req, res) => {
 // Listar todos os utilizadores registrados no MongoDB
 app.get("/users", async (req, res) => {
     try {
-        const users = await User.find({});
+        const users = await UserModel.find({});
         console.log(" Lista de utilizadores no MongoDB:", users);
         res.json(users);
 
