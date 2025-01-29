@@ -22,4 +22,4 @@ const UserSchema = new mongoose.Schema({
 //O Mongoose cria automaticamente uma coleção no MongoDB com base no modelo .Esse modelo(User) pode ser usado no código do server.js graças ao exports
 //Se o nome do modelo for singular ("User") o Mongoose cria a coleção no plural (users).
 //Se o MongoDB ainda não tiver uma coleção users, ele cria automaticamente!
-module.exports = mongoose.model("User", UserSchema);
+module.exports = mongoose.model("User", UserSchema, "users");

@@ -20,20 +20,28 @@ const mongoose = require("mongoose");
 //Importar o modelo de utilizador (User), que define como os dados dos utilizadores serão armazenados no MongoDB.
 const User = require("./models/User"); 
 
+
+const Login = require("./models/Login"); 
+
 // O Express.js funciona como um servidor em Node.js. Ele permite receber, processar e responder a requisições HTTP feitas por aplicações frontend, apps Android, ou qualquer outro cliente.
 //O Express cria um servidor web que escuta requisições numa porta específica e responde a elas.
 const app = express();
 
 const PORT = process.env.PORT || 3001;
 
-// Conectar ao MongoDB Atlas usando a variável de ambiente MONGO_URI
-mongoose.connect(process.env.MONGO_URI, {
+// 🔹 Conectar à base de dados `users` (onde os utilizadores serão registrados)
+const usersDB = mongoose.createConnection(process.env.MONGO_USERS, {
     useNewUrlParser: true,
     useUnifiedTopology: true
-})
-.then(() => console.log(" Conectado ao MongoDB Atlas"))
-.catch(err => console.error("Erro ao conectar ao MongoDB:", err));
+});
+usersDB.on("connected", () => console.log("✅ Conectado ao MongoDB (Users)!"));
 
+// 🔹 Conectar à base de dados `logins` (onde serão armazenados os logins)
+const loginsDB = mongoose.createConnection(process.env.MONGO_LOGINS, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+});
+loginsDB.on("connected", () => console.log("✅ Conectado ao MongoDB (Logins)!"));
 
 //Ativa o CORS para permitir que outros domínios ou aplicações acedam à API.
 app.use(cors());
@@ -129,6 +137,9 @@ app.post("/login", async (req, res) => {
         }
         //Se a senha estiver correta, exibe-se uma mensagem no terminal do servidor
         console.log(`O Utilizador ${username} fez login com sucesso!`);
+
+        const loginEntry = new Login({ username });
+        await loginEntry.save();
 
         //Retorna um "token fake" 
         return res.status(200).json({ token: "fake-jwt-token" });
