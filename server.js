@@ -1,5 +1,12 @@
 
-
+//Carregar o arquivo .env: O arquivo .env está localizado algures numa diretori. Este arquivo geralmente contém variáveis de ambiente, que são valores de configuração sensíveis ou específicas de ambiente 
+// (como credenciais de base de dados, chaves de API, etc.
+//As variáveis são lidas dentro do arquivo .env e definidas no ambiente do Node.js, tornando-as acessíveis via process.env.
+//Arquivo .env (Exemplo):
+//MONGO_USERS=mongodb://localhost:27017/mydb
+//MONGO_LOGINS=mongodb://localhost:27017/logins
+//PORT=3001
+//SECRET_KEY=abc123
 require("dotenv").config();
 
 //Importar o Express.js, um framework para Node.js que facilita a criação de APIs e servidores web
@@ -7,6 +14,13 @@ require("dotenv").config();
 //Com o Express.js, podemos usar app.get() e app.post() para criar endpoints na API
 const express = require("express");
 
+
+//Agora com isto podemos usar o jwt.sign() para gerar um token.
+const jwt = require("jsonwebtoken"); 
+
+// função de hash que criptografa senhas para aumentar a segurança dos dados armazenados
+//A biblioteca bcrypt fornece duas funções principais para lidar com senhas:
+const bcrypt = require("bcrypt");
 
 //Permitir requisições externas.
 const cors = require("cors");
@@ -29,19 +43,14 @@ const app = express();
 
 const PORT = process.env.PORT || 3001;
 
-// 🔹 Conectar à base de dados `users` (onde os utilizadores serão registrados)
-const usersDB = mongoose.createConnection(process.env.MONGO_USERS, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true
-});
-usersDB.on("connected", () => console.log("✅ Conectado ao MongoDB (Users)!"));
+//process.env.MONGO_USERS acede à variável de ambiente MONGO_USERS que foi definida no arquivo .env.
+//Segurança: Assim evita-se colocar informações sensíveis diretamente no código. As variáveis de ambiente são carregadas separadamente no arquivo .env, o que ajuda a proteger dados como senhas e chaves secretas.
+const usersDB = mongoose.createConnection(process.env.MONGO_USERS) 
+usersDB.on("connected", () => console.log("Conectado ao MongoDB (Users)!"));
 
-// 🔹 Conectar à base de dados `logins` (onde serão armazenados os logins)
-const loginsDB = mongoose.createConnection(process.env.MONGO_LOGINS, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true
-});
-loginsDB.on("connected", () => console.log("✅ Conectado ao MongoDB (Logins)!"));
+
+const loginsDB = mongoose.createConnection(process.env.MONGO_LOGINS)
+loginsDB.on("connected", () => console.log("Conectado ao MongoDB (Logins)!"));
 
 // Criar os modelos separados para cada base de dados
 const UserModel = usersDB.model("User", new mongoose.Schema({
@@ -83,9 +92,14 @@ app.post("/register", async (req, res) => {
         if (existingUser) {
             return res.status(409).json({ message: "Utilizador já existe!" });
         }
+
+        // Definir quantas vezes o bcrypt aplicará a função de hash para reforçar a segurança.
+        const saltRounds = 10;  
+        //Criar um hash seguro da senha antes de armazená-la na base de dados
+        const hashedPassword = await bcrypt.hash(password, saltRounds); // Cria um hash seguro
         
         //Cria um novo objeto User com os dados fornecidos.
-        const newUser = new UserModel({ username, email, password });
+        const newUser = new UserModel({ username, email, password: hashedPassword });
 
         //save() serve para armazenar esse utilizador na coleção users do MongoDB
         await newUser.save();
@@ -141,21 +155,51 @@ app.post("/login", async (req, res) => {
             return res.status(401).json({ message: "Credenciais inválidas!" });
         }
 
-        if (user.password !== password) {
-            console.log("Senha incorreta para:", username);
-            // Se a senha fornecida pelo utilizador está incorreta é devolvido este erro 401 - Unauthorized
-            //O return res.status(401).json(...) no Node.js envia uma resposta HTTP para a app, dizendo que o login falhou.
-            //A app recebe essa resposta e exibe um Toast baseado no código HTTP
-            return res.status(401).json({ message: " Credenciais inválidas!" });
-        }
+         //O bcrypt.compare() stá automatizado para comparar a senha digitada com o hash guardado na base de dados.
+         //O bcrypt compara a senha digitada com o hash salvo e retorna true (se for igual) ou false (se for diferente)
+         const isPasswordValid = await bcrypt.compare(password, user.password);
+         
+         //Se a senha está errada
+         if (!isPasswordValid) {
+             console.log("Senha incorreta para:", username);
+             return res.status(401).json({ message: "Credenciais inválidas!" });
+         }
+
+        
         //Se a senha estiver correta, exibe-se uma mensagem no terminal do servidor
         console.log(`O Utilizador ${username} fez login com sucesso!`);
 
         const loginEntry = new LoginModel({ username });
         await loginEntry.save();
 
-        //Retorna um "token fake" 
-        return res.status(200).json({ token: "fake-jwt-token" });
+        //O jwt.sign() é uma função da biblioteca jsonwebtoken usada para gerar um token JWT.Essa função recebe 3 parâmetros:
+
+        //Token completo (dividido em partes),exemplo:
+        //eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.      <- HEADER
+        //eyJ1c2VybmFtZSI6ImpvYW8xMjMiLCJlbWFpbCI6ImpvYW9AZW1haWwuY29tIiwiaWF0IjoxNjcxNTY4MTgzLCJleHAiOjE2NzE1NzE3ODN9. <- PAYLOAD
+        //G_Z0B6oTz9XJlxnFuMVfIu5PzA1FbR4N8yD_LmvLTc8  <- SIGNATURE
+        
+        //O Utilizador envia o nome e senha para o servidor
+        //O servidor verifica se as credenciais estão corretas
+        //Se estiverem corretas, o servidor cria um JWT
+        //O servidor retorna o token JWT para o cliente
+        //O cliente usa esse token para acessar rotas protegidas
+
+        //Depois que o servidor retorna o JWT, o cliente (frontend) faz o seguinte:
+        //Armazena o token podendo ser salvo no localStorage, sessionStorage ou cookies.
+
+        //Se o tempo de expiração (exp) do token ainda não tiver acabado, o utilizador pode: Fechar a app e reabrir sem precisar fazer login novamente.
+        //Enviar o token para o servidor em cada requisição para comprovar que está autenticado.
+        //Mas quando o token expira, o utilizador precisa fazer login novamente
+
+
+        const token = jwt.sign(
+            { username: user.username, email: user.email }, // Payload (dados do utilizador)
+            process.env.SECRET_KEY, // Chave secreta para assinar o token
+            { expiresIn: "1h" } // O token expira em 1 hora.Esse token expira numa1 hora, e depois disso, o utilizador precisará fazer login novamente para obter um novo.
+        );
+
+        return res.status(200).json({ token });
 
     //Se ocorrer qualquer erro inesperado, o código entra no catch (error)
     } catch (error) {
@@ -164,18 +208,6 @@ app.post("/login", async (req, res) => {
     }
 });
 
-// Listar todos os utilizadores registrados no MongoDB
-app.get("/users", async (req, res) => {
-    try {
-        const users = await UserModel.find({});
-        console.log(" Lista de utilizadores no MongoDB:", users);
-        res.json(users);
-
-    } catch (error) {
-        console.error("Erro ao buscar utilizadores:", error);
-        res.status(500).json({ message: "Erro no servidor!" });
-    }
-});
 
 //Esse código inicia o servidor Express.js para que ele comece a escutar requisições HTTP feitas pelo browser, frontend ou outros clientes.
 app.listen(PORT, () => {
