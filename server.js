@@ -20,7 +20,7 @@ const jwt = require("jsonwebtoken");
 
 // função de hash que criptografa senhas para aumentar a segurança dos dados armazenados
 //A biblioteca bcrypt fornece duas funções principais para lidar com senhas:
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs"); 
 
 //Permitir requisições externas.
 const cors = require("cors");
