@@ -1,5 +1,5 @@
 
-//Carregar o arquivo .env: O arquivo .env está localizado algures numa diretori. Este arquivo geralmente contém variáveis de ambiente, que são valores de configuração sensíveis ou específicas de ambiente 
+//Carregar o arquivo .env: O arquivo .env está localizado algures numa diretoria. Este arquivo geralmente contém variáveis de ambiente, que são valores de configuração sensíveis ou específicas de ambiente 
 // (como credenciais de base de dados, chaves de API, etc.
 //As variáveis são lidas dentro do arquivo .env e definidas no ambiente do Node.js, tornando-as acessíveis via process.env.
 //Arquivo .env (Exemplo):
@@ -60,7 +60,7 @@ const UserModel = usersDB.model("User", new mongoose.Schema({
 }));
 
 const LoginModel = loginsDB.model("Login", new mongoose.Schema({
-    username: String,
+    user: String,
     loginTime: { type: Date, default: Date.now }
 }));
 
@@ -83,12 +83,20 @@ app.post("/register", async (req, res) => {
         return res.status(400).json({ message: "Preencha todos os campos!" });
     }
 
+    if (!isValidEmail(email)) {
+        return res.status(400).json({ message: "Email inválido! Domínio Não Aceite" });
+    }
+
+    if (!isValidPassword(password)) {
+        return res.status(400).json({ message: "A senha deve ter pelo menos 6 caracteres, uma letra maiúscula, uma minúscula e um símbolo!" });
+    }
+
     try {
 
         //Se um utilizador com joao123 ou joao@example.com já existir na base, existingUser ficará com esses dados
         const existingUser = await UserModel.findOne({ $or: [{ username }, { email }] });
         
-        //Se o utilizar já existir, retorna o erro 409 - Conflict
+        //Se o utilizador já existir, retorna o erro 409 - Conflict
         if (existingUser) {
             return res.status(409).json({ message: "Utilizador já existe!" });
         }
@@ -117,6 +125,19 @@ app.post("/register", async (req, res) => {
     }
 });
 
+// Função para validar email
+function isValidEmail(email) {
+    const allowedDomains = ["@gmail.com", "@outlook.pt", "@outlook.com", "@hotmail.com"];
+    return allowedDomains.some(domain => email.endsWith(domain));
+}
+
+// Função para validar senha
+function isValidPassword(password) {
+    const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#\$%^&*.,?]).{6,}$/;
+    return regex.test(password);
+}
+
+
 // Permite que um utilizador faça Login 
 //req (request)->Representa a requisição HTTP feita pelo cliente contendo informações como body, headers e params.
 //res (response)->Representa a resposta que o servidor vai enviar para o cliente.
@@ -124,16 +145,16 @@ app.post("/register", async (req, res) => {
 app.post("/login", async (req, res) => {
 
     //Exibe uma mensagem no terminal sempre que um utilizador faz login
-    console.log("Requisição de login recebida!", req.body);
+    console.log("Requisição de login recebida!");
 
     //Extrai username e password do req.body
     //req.body contém os dados enviados pelo cliente (frontend, app Android, etc.)
     //Portanto aqui usa-se a desestruturação de objeto para pegar apenas os dados que interessam do req.body, mesmo que o body tenha mais dados.
-    const { username, password } = req.body;
+    const { loginInput, password } = req.body; // loginInput pode ser username ou email
     
     //Verifica se username e password estão vazios (undefined ou null).
     //Se algum dos campos estiver vazio, retorna 400 - Bad Request com a mensagem "Preencha todos os campos!"
-    if (!username || !password) {
+    if (!loginInput || !password) {
         return res.status(400).json({ message: "Preencha todos os campos!" });
     }
 
@@ -142,35 +163,41 @@ app.post("/login", async (req, res) => {
         //Acessa à base de dados que leva tempo para responder.
         //Com async, o Node.js continua a rodar outras tarefas enquanto espera a resposta do MongoDB.
         //A função findOne() é um método do Mongoose,usada para interagir com o MongoDB
-        // Aqui acede-se à coleção users no base de dados MongoDB procurando-se um único utilizador onde username seja igual ao valor passado.
-        const user = await UserModel.findOne({ username });
+        // Aqui acede-se à coleção users no base de dados MongoDB procurando-se um único utilizador onde username ou email seja igual ao valor passado.
+       // Buscar o utilizador pelo username OU pelo email
+       // 🔹 Procurar o utilizador pelo "username" OU pelo "email"
+       const foundUser = await UserModel.findOne({ 
+        $or: [{ username: loginInput }, { email: loginInput }]
+        });
 
-        //Se o usuário não existir, user será null
-        if (!user) {
+        //Se o ytilizador não existir, user será null
+        if (!foundUser) {
             //Se um utilizador tentar fazer login com um nome que não está na base de dados, essa mensagem aparece no terminal do servidor
             // O console.log é útil para fazer debug 
-            console.log(" Utilizador não encontrado:", username);
+            console.log(" Utilizador não encontrado:", loginInput);
 
             //Resposta enviada para o frontend
             return res.status(401).json({ message: "Credenciais inválidas!" });
         }
 
-         //O bcrypt.compare() stá automatizado para comparar a senha digitada com o hash guardado na base de dados.
+         //O bcrypt.compare() está automatizado para comparar a senha digitada com o hash guardado na base de dados.
          //O bcrypt compara a senha digitada com o hash salvo e retorna true (se for igual) ou false (se for diferente)
-         const isPasswordValid = await bcrypt.compare(password, user.password);
+         const isPasswordValid = await bcrypt.compare(password, foundUser.password);
          
          //Se a senha está errada
          if (!isPasswordValid) {
-             console.log("Senha incorreta para:", username);
+             console.log("Senha incorreta para:", loginInput);
              return res.status(401).json({ message: "Credenciais inválidas!" });
          }
 
         
         //Se a senha estiver correta, exibe-se uma mensagem no terminal do servidor
-        console.log(`O Utilizador ${username} fez login com sucesso!`);
+        console.log(`O Utilizador ${loginInput} fez login com sucesso!`);
 
-        const loginEntry = new LoginModel({ username });
+        const loginEntry = new LoginModel({ loginInput });
         await loginEntry.save();
+
+
 
         //O jwt.sign() é uma função da biblioteca jsonwebtoken usada para gerar um token JWT.Essa função recebe 3 parâmetros:
 
@@ -191,10 +218,8 @@ app.post("/login", async (req, res) => {
         //Se o tempo de expiração (exp) do token ainda não tiver acabado, o utilizador pode: Fechar a app e reabrir sem precisar fazer login novamente.
         //Enviar o token para o servidor em cada requisição para comprovar que está autenticado.
         //Mas quando o token expira, o utilizador precisa fazer login novamente
-
-
         const token = jwt.sign(
-            { username: user.username, email: user.email }, // Payload (dados do utilizador)
+            { loginInput: foundUser.loginInput, email: foundUser.email }, // Payload (dados do utilizador)
             process.env.SECRET_KEY, // Chave secreta para assinar o token
             { expiresIn: "1h" } // O token expira em 1 hora.Esse token expira numa1 hora, e depois disso, o utilizador precisará fazer login novamente para obter um novo.
         );
