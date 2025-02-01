@@ -282,8 +282,8 @@ app.post("/login", async (req, res) => {
 // Endpoint para eliminar o perfil do utilizador
 app.delete("/deleteUser",authenticateToken, async (req, res) => {
 
-    const { username } = req.user.username; // Obtém o username do token JWT
-    
+    const  username  = req.user.username; // Obtém o username do token JWT
+
    //Se o campo username estiver vazio ou não enviado, responde com 400 (Bad Request) e exibe a mensagem "Nome de utilizador necessário!".
     if (!username) {
         return res.status(400).json({ message: "Nome de utilizador necessário!" });
