@@ -31,6 +31,52 @@ const bodyParser = require("body-parser");
 //Importar o Mongoose, uma biblioteca do Node.js que me permite conectar ao MongoDB e trabalhar com bases de dados.
 const mongoose = require("mongoose");
 
+
+
+// Esta função é um middleware de autenticação para validar tokens JWT antes de permitir o acesso a rotas protegidas
+const authenticateToken = (req, res, next) => {
+
+    //Authorization é usado para enviar tokens de autenticação ao servidor.
+    //Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+    //Bearer--> indica que estamos a usar um token JWT.
+    //eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9--> é o token JWT real.
+
+    //Aceder os cabeçalhos HTTP da requisição (req.headers).
+    //Buscar o cabeçalho "authorization", que contém o token.
+    //Se o cabeçalho não existir, authHeader será undefined
+    
+    //authHeader contém o cabeçalho Authorization enviado pelo cliente
+    const authHeader = req.headers["authorization"];
+
+    //authHeader && → Garante que o código só continue se authHeader existir
+    //Se authHeader for undefined ou null, o código para aqui e token recebe undefined
+    //Se authHeader existir é executado o próximo passo.
+    //authHeader.split(" ") → Divide a string onde houver um espaço (" ")
+    // A string "Bearer ABC123DEF456GHI789" transforma-se num array:
+    //["Bearer", "ABC123DEF456GHI789"]
+    //[1] -> Pega apenas a segunda parte (token)
+    //Como o .split(" ") gerou ["Bearer", "TOKEN"], agora pegamos apenas o TOKEN, que está no índice [1].
+    const token = authHeader && authHeader.split(" ")[1]; 
+
+    //Se o token for undefined ou null, a API responde com um erro 401 Unauthorized.
+    if (!token) {
+        return res.status(401).json({ message: "Acesso negado! Token não fornecido." });
+    }
+   
+    //Aqui usa-se jwt.verify() para validar o token com a chave secreta (SECRET_KEY).
+    //O token foi gerado no login, então aqui estamos a verificar se:
+    //O token é válido (não foi adulterado).
+    //O token não expirou (se tiver um tempo de expiração).
+    //Se a validação for bem-sucedida, os dados do usuário serão armazenados em user
+    jwt.verify(token, process.env.SECRET_KEY, (err, user) => {
+        if (err) {
+            return res.status(403).json({ message: "Token inválido ou expirado!" });
+        }
+        req.user = user; // Adiciona os dados do utilizador ao request
+        next();
+    });
+};
+
 //Importar o modelo de utilizador (User), que define como os dados dos utilizadores serão armazenados no MongoDB.
 const User = require("./models/User"); 
 
@@ -229,6 +275,37 @@ app.post("/login", async (req, res) => {
     //Se ocorrer qualquer erro inesperado, o código entra no catch (error)
     } catch (error) {
         console.error("Erro no login:", error);
+        res.status(500).json({ message: "Erro no servidor!" });
+    }
+});
+
+// Endpoint para eliminar o perfil do utilizador
+app.delete("/deleteUser",authenticateToken, async (req, res) => {
+
+    const { username } = req.user.username; // Obtém o username do token JWT
+    
+   //Se o campo username estiver vazio ou não enviado, responde com 400 (Bad Request) e exibe a mensagem "Nome de utilizador necessário!".
+    if (!username) {
+        return res.status(400).json({ message: "Nome de utilizador necessário!" });
+    }
+
+    try {
+        //Tenta remover um utilizador do MongoDB onde o username coincida com o recebido na requisição.
+        const result = await UserModel.deleteOne({ username });
+
+        //deletedCount === 0, significa que não existe um utilizador com esse nome, então a API responde com 404 (Not Found) e a mensagem "Utilizador não encontrado!".
+        if (result.deletedCount === 0) {
+            return res.status(404).json({ message: "Utilizador não encontrado!" });
+        }
+        
+        //Se o utilizador foi encontrado e excluído com sucesso:
+        //Exibe uma mensagem no terminal do servidor indicando que o utilizador foi eliminado.
+        //Retorna um código 200 (OK) e a mensagem "Conta eliminada com sucesso!" para o cliente.
+        console.log(`Utilizador ${username} eliminado com sucesso!`);
+        res.status(200).json({ message: "Conta eliminada com sucesso!" });
+
+    } catch (error) {
+        console.error("Erro ao eliminar utilizador:", error);
         res.status(500).json({ message: "Erro no servidor!" });
     }
 });
