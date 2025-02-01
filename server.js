@@ -194,7 +194,7 @@ app.post("/login", async (req, res) => {
         //Se a senha estiver correta, exibe-se uma mensagem no terminal do servidor
         console.log(`O Utilizador ${loginInput} fez login com sucesso!`);
 
-        const loginEntry = new LoginModel({ loginInput });
+        const loginEntry = new LoginModel({ user:loginInput });
         await loginEntry.save();
 
 
@@ -219,7 +219,7 @@ app.post("/login", async (req, res) => {
         //Enviar o token para o servidor em cada requisição para comprovar que está autenticado.
         //Mas quando o token expira, o utilizador precisa fazer login novamente
         const token = jwt.sign(
-            { loginInput: foundUser.loginInput, email: foundUser.email }, // Payload (dados do utilizador)
+            { username: foundUser.username, email: foundUser.email }, // Payload (dados do utilizador)
             process.env.SECRET_KEY, // Chave secreta para assinar o token
             { expiresIn: "1h" } // O token expira em 1 hora.Esse token expira numa1 hora, e depois disso, o utilizador precisará fazer login novamente para obter um novo.
         );
